@@ -8,3 +8,4 @@ server_modules
 index.js
 package.json
 package-lock.json
+_*

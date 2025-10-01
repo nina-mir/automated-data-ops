@@ -1,0 +1,410 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Location Flow Sankey Diagram</title>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <script src="https://unpkg.com/d3-array@1"></script>
+    <script src="https://unpkg.com/d3-collection@1"></script>
+    <script src="https://unpkg.com/d3-path@1"></script>
+    <script src="https://unpkg.com/d3-shape@1"></script>
+    <script src="https://unpkg.com/d3-sankey@0"></script>
+    <link rel="stylesheet" href="sankey.css">
+</head>
+
+<body>
+    <div class="container">
+        <h1>Location Flow Sankey Diagram</h1>
+        <p class="description">Visualizing flows between starting and ending locations (unknown, ocean, or country)</p>
+
+        <div class="controls">
+            <button id="toggle-unknown">Toggle Unknown Flows</button>
+            <button id="reset-view">Reset View</button>
+        </div>
+        <div class="legend">
+            <div class="legend-item">
+                <div class="legend-color" style="background-color: #e74c3c;"></div>
+                <span>Country</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color" style="background-color: #3498db;"></div>
+                <span>Ocean</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color" style="background-color: #95a5a6;"></div>
+                <span>Unknown (e.g., polar regions)</span>
+            </div>
+        </div>
+        <div class="sankey-container">
+            <svg width="1000" height="1000"></svg>
+        </div>
+
+
+    </div>
+
+    <script>
+        // Set up dimensions and margins
+        const margin = { top: 20, right: 10, bottom: 10, left: 10 };
+        const width = 1000 - margin.left - margin.right;
+        const height = 2200 - margin.top - margin.bottom;
+
+        // Create SVG container
+        const svg = d3.select('svg')
+            .attr('width', width + margin.left + margin.right)
+            .attr('height', height + margin.top + margin.bottom)
+            .append('g')
+            .attr('transform', `translate(${margin.left},${margin.top})`);
+
+        // Create tooltip
+        const tooltip = d3.select('body').append('div')
+            .attr('class', 'tooltip')
+            .style('opacity', 0.9);
+
+        // Track currently selected node
+        let selectedNode = null;
+        // Variables to store link and node selections
+        let link, node;
+
+        // Create color scale based on category
+        const colorScale = d3.scaleOrdinal()
+            .domain(['country', 'ocean', 'unknown'])
+            .range(['#e74c3c', '#3498db', '#95a5a6']);
+
+        const fileNames = [
+            'to_be_analyzed.json'
+        ]
+
+        // Function to reset all highlights
+        function resetHighlights() {
+            if (link) {
+                link
+                    .style('stroke-opacity', 0.4)
+                    .attr('stroke-width', d => Math.max(1, d.width));
+            }
+
+            if (node) {
+                node.select('rect')
+                    .attr('stroke-width', 0.5);
+            }
+
+            selectedNode = null;
+        }
+
+        // Function to highlight node and its connections
+        function highlightNodeConnections(d) {
+            // Highlight the node
+            node.select('rect')
+                .filter(nodeD => nodeD.index === d.index)
+                .attr('stroke-width', 8);
+
+            // Highlight connected links
+            link
+                .style('stroke-opacity', l =>
+                    (l.source.index === d.index || l.target.index === d.index) ? 0.8 : 0.1)
+                .attr('stroke-width', l =>
+                    (l.source.index === d.index || l.target.index === d.index) ?
+                        Math.max(2, l.width * 1.2) : Math.max(1, l.width));
+        }
+
+        // Read in data file of 'to_be_analyzed.json'
+
+        async function loadDataFile(fileName) {
+            try {
+                const data = await d3.json(fileName);
+                console.log('read the file!')
+
+                // Process data for Sankey diagram
+                function processData(includeUnknown = true) {
+                    const nodes = [];
+                    const links = [];
+                    const nodeMap = new Map();
+
+                    // Helper function to get or create node
+                    function getNode(type, name, category) {
+                        const key = `${type}-${name}`;
+                        if (!nodeMap.has(key)) {
+                            const node = {
+                                id: nodes.length,
+                                name: name,
+                                type: type,
+                                category: category
+                            };
+                            nodes.push(node);
+                            nodeMap.set(key, node);
+                        }
+                        return nodeMap.get(key);
+                    }
+
+                    // Process each data item
+                    data.forEach(item => {
+                        // Get start location info
+                        const startType = Object.keys(item['00.json'])[0];
+                        const startValue = item['00.json'][startType];
+
+                        // Get end location info
+                        const endType = Object.keys(item['23.json'])[0];
+                        const endValue = item['23.json'][endType];
+
+                        // Skip unknown if not included
+                        if (!includeUnknown && (startType === 'unknown' || endType === 'unknown')) {
+                            return;
+                        }
+
+                        // Create nodes - e.g.: start, Russia, country
+                        const sourceNode = getNode('start', startValue, startType);
+                        const targetNode = getNode('end', endValue, endType);
+
+                        // Create link
+                        links.push({
+                            source: sourceNode.id,
+                            target: targetNode.id,
+                            value: 1
+                        });
+                    });
+
+                    return { nodes, links };
+                }
+
+                // Draw the Sankey diagram
+                function drawSankey(includeUnknown = true) {
+                    // Clear previous diagram
+                    svg.selectAll('*').remove();
+
+                    // Process data
+                    const { nodes, links } = processData(includeUnknown);
+
+                    // Define the desired order for start nodes
+                    const categoryOrder = { 'unknown': 0, 'ocean': 1, 'country': 2 };
+
+                    // Separate start and end nodes
+                    const startNodes = nodes.filter(node => node.type === 'start');
+                    const endNodes = nodes.filter(node => node.type === 'end');
+
+                    // Sort start nodes by category in the desired order
+                    startNodes.sort((a, b) => categoryOrder[a.category] - categoryOrder[b.category]);
+
+                    // Combine sorted start nodes with end nodes
+                    const finalNodes = [...startNodes, ...endNodes];
+
+                    // Create a mapping from old node id to new node id
+                    const idMap = {};
+                    finalNodes.forEach((node, index) => {
+                        idMap[node.id] = index;
+                        node.id = index;
+                    });
+
+                    // Update links to use new node IDs
+                    const updatedLinks = links.map(link => {
+                        return {
+                            source: idMap[link.source],
+                            target: idMap[link.target],
+                            value: link.value
+                        };
+                    });
+
+                    // Create Sankey generator
+                    const sankey = d3.sankey()
+                        .nodeWidth(50)
+                        .nodePadding(10)
+                        .extent([[0, 0], [width - 1, height - 1]])
+                        .nodeSort((a, b) => {
+                            // Only sort start nodes, leave end nodes as they are
+                            if (a.type === 'start' && b.type === 'start') {
+                                return categoryOrder[a.category] - categoryOrder[b.category];
+                            }
+                            // Don't sort end nodes relative to start nodes or each other
+                            return 0;
+                        });
+
+                    // Generate Sankey layout
+                    const { nodes: sankeyNodes, links: sankeyLinks } = sankey({
+                        nodes: finalNodes.map(d => Object.assign({}, d)),
+                        links: updatedLinks.map(d => Object.assign({}, d))
+                    });
+
+                    // Draw links
+                    link = svg.append('g')
+                        .selectAll('.link')
+                        .data(sankeyLinks)
+                        .enter()
+                        .append('path')
+                        .attr('class', 'link')
+                        .attr('d', d3.sankeyLinkHorizontal())
+                        .attr('stroke', d => {
+                            return colorScale(finalNodes[d.source.index].category)
+                        })
+                        .attr('stroke-width', d => Math.max(1, d.width))
+                        .attr('stroke-opacity', 0.4)
+                        .style('fill', 'none')
+                        .on('mouseover', function (event, d) {
+                            // Highlight this link
+                            d3.select(this)
+                                .attr('stroke-opacity', 0.7)
+                                .attr('stroke-width', d => Math.max(2, d.width * 1.2));
+
+                            // Show tooltip
+                            tooltip.transition()
+                                .duration(200)
+                                .style('opacity', 0.9);
+                            tooltip.html(`From: ${finalNodes[d.source.index].name}<br/>To: ${finalNodes[d.target.index].name}`)
+                                .style('left', (event.pageX + 10) + 'px')
+                                .style('top', (event.pageY - 28) + 'px');
+                        })
+                        .on('mouseout', function (event, d) {
+                            // Only reset if no node is selected
+                            if (selectedNode === null) {
+                                d3.select(this)
+                                    .attr('stroke-opacity', 0.4)
+                                    .attr('stroke-width', d => Math.max(1, d.width));
+                            }
+
+                            // Hide tooltip
+                            tooltip.transition()
+                                .duration(500)
+                                .style('opacity', 0);
+                        });
+
+                    // Draw nodes
+                    node = svg.append('g')
+                        .selectAll('.node')
+                        .data(sankeyNodes)
+                        .enter()
+                        .append('g')
+                        .attr('class', 'node')
+                        .attr('transform', d => `translate(${d.x0},${d.y0})`);
+
+                    // Add rectangles for nodes
+                    node.append('rect')
+                        .attr('height', d => d.y1 - d.y0)
+                        .attr('width', d => d.x1 - d.x0)
+                        .attr('fill', d => colorScale(d.category))
+                        .attr('stroke', d => d3.rgb(colorScale(d.category)).darker(0.5))
+                        .attr('stroke-width', 0.5)
+                        .on('mouseover', function (event, d) {
+                            if (!selectedNode) {
+                                // Highlight node
+                                d3.select(this)
+                                    .attr('stroke-width', 8);
+
+                                // Highlight connected links
+                                link.style('stroke-opacity', l =>
+                                    l.source.index === d.index || l.target.index === d.index ? 0.8 : 0.1);
+                            }
+
+
+                            // Show tooltip
+                            tooltip.transition()
+                                .duration(200)
+                                .style('opacity', 0.9);
+                            tooltip.html(`${d.name}<br/>${d.type}: ${d.category}`)
+                                .style('left', (event.pageX + 10) + 'px')
+                                .style('top', (event.pageY - 28) + 'px');
+                        })
+                        .on('mouseout', function (event, d) {
+                            // Only reset if no node is selected or this isn't the selected node
+                            if (!selectedNode) {
+                                d3.select(this)
+                                    .attr('stroke-width', 0.5);
+
+                                // Reset links if no node is selected and this isn't the selected node
+                                if (selectedNode === null || selectedNode.index !== d.index) {
+                                    link.style('stroke-opacity', 0.4)
+                                        .attr('stroke-width', l => Math.max(1, l.width));
+                                }
+                            }
+
+                            // Hide tooltip
+                            tooltip.transition()
+                                .duration(500)
+                                .style('opacity', 0);
+                        })
+                        .on('click', function (event, d) {
+                            // Prevent event from bubbling to document
+                            event.stopPropagation();
+
+                            // If this node is already selected, deselect it
+                            if (selectedNode && selectedNode.index === d.index) {
+                                // Reset only this node's highlights
+                                node.select('rect')
+                                    .filter(nodeD => nodeD.index === d.index)
+                                    .attr('stroke-width', 0.5);
+
+                                d3.select(this)
+                                    .attr('stroke-width', 0);
+                                // Reset connected links
+                                link
+                                    .style('stroke-opacity', 0.4)
+                                    .attr('stroke-width', l => Math.max(1, l.width));
+
+                                selectedNode = null;
+                                return;
+                            }
+
+                            // Set as selected node
+                            selectedNode = d;
+
+                            // Reset all other highlights first
+                            node.select('rect')
+                                .attr('stroke-width', 0.9);
+
+                            link
+                                .style('stroke-opacity', 0.4)
+                                .attr('stroke-width', l => Math.max(1, l.width));
+
+                            // Highlight this node and its connections
+                            highlightNodeConnections(d);
+                        })
+
+                    // Add labels to nodes
+                    node.append('text')
+                        .attr('x', d => d.type === 'start' ? -6 : 0)
+                        .attr('y', d => (d.y1 - d.y0) / 2)
+                        .attr('dy', '0.35rem')
+                        .attr('text-anchor', d => d.type === 'start' ? 'end' : 'end')
+                        .text(d => d.name)
+                        .filter(d => d.x0 < width / 2)
+                        .attr('x', d => d.x1 - d.x0 + 6)
+                        .attr('text-anchor', 'start');
+                }
+
+
+                // Initial draw
+                drawSankey(true);
+
+                // Add click event to document to reset highlights when clicking outside
+                document.addEventListener('click', function (event) {
+                    // Check if click was outside the SVG
+                    if (!event.target.closest('svg')) {
+                        resetHighlights();
+                    }
+                });
+
+                // Add event listeners for controls
+                let showUnknown = true;
+                document.getElementById('toggle-unknown').addEventListener('click', function () {
+                    showUnknown = !showUnknown;
+                    drawSankey(showUnknown);
+                    this.textContent = showUnknown ? 'Hide Unknown Flows' : 'Show Unknown Flows';
+                    // Reset selection when redrawing
+                    selectedNode = null;
+                });
+
+                document.getElementById('reset-view').addEventListener('click', function () {
+                    showUnknown = true;
+                    document.getElementById('toggle-unknown').textContent = 'Hide Unknown Flows';
+                    drawSankey(true);
+                    // Reset selection when redrawing
+                    selectedNode = null;
+                });
+            } catch (error) {
+                console.error("Error loading JSON:", error);
+            }
+        }
+
+        loadDataFile(fileNames[0])
+    </script>
+</body>
+
+</html>
