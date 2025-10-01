@@ -1,0 +1,23 @@
+{
+  "name": "windborne",
+  "version": "1.0.0",
+  "description": "",
+  "license": "ISC",
+  "author": "",
+  "type": "module",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "init-db": "node runInit.js",
+    "test-db": "node testDb.js",
+    "test-geocoding": "node testGeocoding.js",
+    "test-processor": "node testProcessor.js",
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "axios": "^1.12.2",
+    "better-sqlite3": "^11.0.0",
+    "dotenv": "^17.2.2",
+    "simple-git": "^3.28.0"
+  }
+}

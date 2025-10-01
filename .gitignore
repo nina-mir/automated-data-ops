@@ -3,9 +3,5 @@ API_script_browser_only
 d3-idea
 node_modules
 original_API_files
-server_modules
 .env
-index.js
-package.json
-package-lock.json
 _*

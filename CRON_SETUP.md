@@ -4,7 +4,7 @@
 
 SSH into your server:
 ```bash
-ssh username@your-server-ip
+ssh your-username@your-server-ip
 ```
 
 ### Install Node.js (using nvm)
@@ -26,8 +26,8 @@ npm --version
 
 ### Install build tools (needed for better-sqlite3)
 ```bash
-apt update
-apt install -y build-essential python3
+sudo apt update
+sudo apt install -y build-essential python3
 ```
 
 ---
@@ -44,7 +44,7 @@ cd YOUR_REPO
 ### Option B: Upload via SCP
 From your local machine:
 ```bash
-scp -r /path/to/your/project root@your-server-ip:~/windborne
+scp -r /path/to/your/project your-username@your-server-ip:~/windborne
 ```
 
 ---
@@ -118,13 +118,13 @@ crontab -e
 
 Add this line to run every hour at minute 5:
 ```cron
-5 * * * * cd /root/windborne && /root/.nvm/versions/node/v20.*/bin/node index.js >> /root/windborne/logs/cron.log 2>&1
+5 * * * * cd /home/YOUR_USERNAME/windborne && /home/YOUR_USERNAME/.nvm/versions/node/v20.*/bin/node index.js >> /home/YOUR_USERNAME/windborne/logs/cron.log 2>&1
 ```
 
 **Explanation:**
 - `5 * * * *` = Run at 5 minutes past every hour
-- `cd /root/windborne` = Navigate to project directory
-- `/root/.nvm/versions/node/v20.*/bin/node` = Full path to node (cron needs absolute paths)
+- `cd /home/YOUR_USERNAME/windborne` = Navigate to project directory
+- `/home/YOUR_USERNAME/.nvm/versions/node/v20.*/bin/node` = Full path to node (cron needs absolute paths)
 - `index.js` = Your script
 - `>> logs/cron.log 2>&1` = Log output to file
 
@@ -139,18 +139,20 @@ which node
 # Use this path in your crontab
 ```
 
+**Note:** Replace `YOUR_USERNAME` with your actual username in all paths above.
+
 ---
 
 ## 8. Alternative: Run at Specific Time
 
 If you want to run at specific times (e.g., every hour on the hour):
 ```cron
-0 * * * * cd /root/windborne && /root/.nvm/versions/node/v20.*/bin/node index.js >> /root/windborne/logs/cron.log 2>&1
+0 * * * * cd /home/YOUR_USERNAME/windborne && /home/YOUR_USERNAME/.nvm/versions/node/v20.*/bin/node index.js >> /home/YOUR_USERNAME/windborne/logs/cron.log 2>&1
 ```
 
 Or twice daily (midnight and noon):
 ```cron
-0 0,12 * * * cd /root/windborne && /root/.nvm/versions/node/v20.*/bin/node index.js >> /root/windborne/logs/cron.log 2>&1
+0 0,12 * * * cd /home/YOUR_USERNAME/windborne && /home/YOUR_USERNAME/.nvm/versions/node/v20.*/bin/node index.js >> /home/YOUR_USERNAME/windborne/logs/cron.log 2>&1
 ```
 
 ---
@@ -165,6 +167,7 @@ tail -f ~/windborne/logs/cron.log
 ### Check if cron is running:
 ```bash
 grep CRON /var/log/syslog
+# May need sudo: sudo grep CRON /var/log/syslog
 ```
 
 ### List current cron jobs:
@@ -180,7 +183,7 @@ crontab -l
 Check system cron service:
 ```bash
 systemctl status cron
-systemctl start cron
+sudo systemctl start cron
 ```
 
 ### Permission issues?
@@ -193,7 +196,7 @@ chmod +x ~/windborne/index.js
 If you get "database is locked" errors:
 ```bash
 # Close any hanging connections
-pkill node
+pkill -u $USER node
 ```
 
 ### Check disk space (1GB server):
@@ -205,7 +208,7 @@ du -sh ~/windborne/*
 ### Rotate logs to prevent filling disk:
 ```bash
 # Add to crontab to rotate logs weekly
-0 0 * * 0 cd /root/windborne/logs && mv cron.log cron.log.old && touch cron.log
+0 0 * * 0 cd /home/YOUR_USERNAME/windborne/logs && mv cron.log cron.log.old && touch cron.log
 ```
 
 ---
@@ -220,7 +223,7 @@ NODE_OPTIONS="--max-old-space-size=512"
 
 Full crontab line:
 ```cron
-5 * * * * cd /root/windborne && NODE_OPTIONS="--max-old-space-size=512" /root/.nvm/versions/node/v20.*/bin/node index.js >> /root/windborne/logs/cron.log 2>&1
+5 * * * * cd /home/YOUR_USERNAME/windborne && NODE_OPTIONS="--max-old-space-size=512" /home/YOUR_USERNAME/.nvm/versions/node/v20.*/bin/node index.js >> /home/YOUR_USERNAME/windborne/logs/cron.log 2>&1
 ```
 
 ---
@@ -259,7 +262,7 @@ addEventListener('fetch', event => {
 
 ```bash
 # SSH to server
-ssh root@your-server-ip
+ssh your-username@your-server-ip
 
 # Check if cron job ran recently
 tail -20 ~/windborne/logs/cron.log
@@ -288,3 +291,31 @@ cat ~/windborne/fetchedDataFiles/processed.json | head -50
 - [ ] First cron run verified (check logs)
 - [ ] Cloudflare Worker configured
 - [ ] Frontend receiving data
+
+---
+
+## Security Best Practices
+
+### File Permissions
+```bash
+# Ensure .env is not readable by others
+chmod 600 ~/windborne/.env
+
+# Ensure database directory is secure
+chmod 700 ~/windborne/database
+```
+
+### GitHub Token Security
+- Use a **Personal Access Token** with minimal permissions (only repo access)
+- Store it in `.env` (never commit to git)
+- Add `.env` to `.gitignore`
+
+### Regular Updates
+```bash
+# Keep system updated
+sudo apt update && sudo apt upgrade -y
+
+# Keep Node.js updated
+nvm install --lts
+nvm use --lts
+```
