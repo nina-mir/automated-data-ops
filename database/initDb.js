@@ -102,7 +102,7 @@ function migrateStartingData() {
 /**
  * Display database statistics
  */
-function showStats() {
+export function showStats() {
     const stats = db.prepare('SELECT COUNT(*) as total FROM geocache').get();
     const byType = db.prepare(`
         SELECT location_type, COUNT(*) as count 
