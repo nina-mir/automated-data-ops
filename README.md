@@ -19,4 +19,4 @@ The frontend make fetch requests to the following API end point to receive the l
 - https://windborne-systems-job-application.ninamirf.workers.dev/[00.json, 01.json, etc]
 
 ## The Overall application's flowchart
-<img width=500 src="./readme_assets/flow_chart.png" />
+<img width=800 src="./readme_assets/flow_chart.png" />
